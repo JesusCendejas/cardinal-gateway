@@ -120,11 +120,16 @@ export async function createHarness(
     capabilityToken: 'cap-token-bob',
   };
 
-  backend.setSandbox(
+  backend.setUserSandbox(
+    aliceBase.userId,
     aliceBase.agentId,
     sandboxFor(aliceBase, agentAlice),
   );
-  backend.setSandbox(bobBase.agentId, sandboxFor(bobBase, agentBob));
+  backend.setUserSandbox(
+    bobBase.userId,
+    bobBase.agentId,
+    sandboxFor(bobBase, agentBob),
+  );
   backend.setCredential(aliceBase.sandboxId, aliceBase.capabilityToken);
   backend.setCredential(bobBase.sandboxId, bobBase.capabilityToken);
 
@@ -132,7 +137,6 @@ export async function createHarness(
     ...aliceBase,
     accessToken: await signAccessToken({
       userId: aliceBase.userId,
-      agentId: aliceBase.agentId,
       secret: config.accessTokenSecret,
     }),
   };
@@ -140,7 +144,6 @@ export async function createHarness(
     ...bobBase,
     accessToken: await signAccessToken({
       userId: bobBase.userId,
-      agentId: bobBase.agentId,
       secret: config.accessTokenSecret,
     }),
   };

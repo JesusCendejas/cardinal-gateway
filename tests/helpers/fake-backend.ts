@@ -27,8 +27,18 @@ export interface BackendHttpResponse {
   body: unknown;
 }
 
+export interface RouteRequestBody {
+  userId: string;
+  /**
+   * Optional. Omitted means "the user's primary agent". The backend does NOT
+   * use the empty string as a sentinel: `agentId: ""` is a lookup and returns
+   * NOT_FOUND, exactly like the real backend.
+   */
+  agentId?: string;
+}
+
 export type RouteHandler = (
-  body: { userId: string; agentId: string },
+  body: RouteRequestBody,
   request: RecordedBackendRequest,
 ) => BackendHttpResponse | Promise<BackendHttpResponse>;
 
@@ -88,6 +98,11 @@ function sendJson(
   response.end(payload);
 }
 
+interface SandboxRecord {
+  userId: string;
+  sandbox: SandboxConfig;
+}
+
 /**
  * The three internal backend endpoints, authenticated with X-Internal-Token.
  * Every request (headers + parsed body) is recorded so tests can assert both
@@ -95,7 +110,8 @@ function sendJson(
  */
 export class FakeBackend {
   readonly requests: RecordedBackendRequest[] = [];
-  readonly sandboxes = new Map<string, SandboxConfig>();
+  readonly sandboxes = new Map<string, SandboxRecord>();
+  readonly defaultSandboxes = new Map<string, SandboxConfig>();
   readonly credentialsBySandbox = new Map<string, string>();
   readonly tickets = new Map<string, TicketRecord>();
 
@@ -149,8 +165,29 @@ export class FakeBackend {
     return backend;
   }
 
-  setSandbox(agentId: string, sandbox: SandboxConfig): void {
-    this.sandboxes.set(agentId, sandbox);
+  /**
+   * Register an agent-specific sandbox owned by `userId`. The backend is the
+   * source of truth: asking for another user's agentId returns NOT_FOUND.
+   */
+  setSandbox(userId: string, agentId: string, sandbox: SandboxConfig): void {
+    this.sandboxes.set(agentId, { userId, sandbox });
+  }
+
+  /**
+   * Convenience for tests that change the transport of a user's only sandbox:
+   * keep both the agent-specific route and the default route in sync.
+   */
+  setUserSandbox(userId: string, agentId: string, sandbox: SandboxConfig): void {
+    this.setSandbox(userId, agentId, sandbox);
+    this.setDefaultSandbox(userId, sandbox);
+  }
+
+  /**
+   * Sandbox used for collection/default routes, where the gateway sends
+   * `agentId: ""` because the access token carries no agent information.
+   */
+  setDefaultSandbox(userId: string, sandbox: SandboxConfig): void {
+    this.defaultSandboxes.set(userId, sandbox);
   }
 
   setCredential(sandboxId: string, token: string): void {
@@ -197,14 +234,26 @@ export class FakeBackend {
     this.sockets.clear();
   }
 
-  private defaultRoute(
-    body: { userId: string; agentId: string },
-  ): BackendHttpResponse {
-    const sandbox = this.sandboxes.get(body.agentId);
-    if (!sandbox) {
+  private defaultRoute(body: RouteRequestBody): BackendHttpResponse {
+    // Absent means "primary agent for this user".
+    if (body.agentId === undefined) {
+      const defaultSandbox = this.defaultSandboxes.get(body.userId);
+      if (!defaultSandbox) {
+        return { status: 200, body: { error: 'NOT_FOUND' } };
+      }
+      return { status: 200, body: defaultSandbox };
+    }
+
+    // Empty is a real lookup value, not a synonym for absent.
+    if (body.agentId === '') {
       return { status: 200, body: { error: 'NOT_FOUND' } };
     }
-    return { status: 200, body: sandbox };
+
+    const record = this.sandboxes.get(body.agentId);
+    if (!record || record.userId !== body.userId) {
+      return { status: 200, body: { error: 'NOT_FOUND' } };
+    }
+    return { status: 200, body: record.sandbox };
   }
 
   private defaultCredentials(body: {
@@ -287,20 +336,24 @@ export class FakeBackend {
         const routeBody = body as { userId?: unknown; agentId?: unknown };
         if (
           typeof routeBody?.userId !== 'string' ||
-          typeof routeBody.agentId !== 'string'
+          (routeBody.agentId !== undefined &&
+            typeof routeBody.agentId !== 'string')
         ) {
           sendJson(response, 400, { error: 'INVALID_BODY' });
           return;
         }
+
+        const routeInput: RouteRequestBody = { userId: routeBody.userId };
+        if (routeBody.agentId !== undefined) {
+          routeInput.agentId = routeBody.agentId;
+        }
+
         const result = this.routeHandler
           ? await this.routeHandler(
-              { userId: routeBody.userId, agentId: routeBody.agentId },
+              routeInput,
               this.requests.at(-1) as RecordedBackendRequest,
             )
-          : this.defaultRoute({
-              userId: routeBody.userId,
-              agentId: routeBody.agentId,
-            });
+          : this.defaultRoute(routeInput);
         sendJson(response, result.status, result.body);
         return;
       }

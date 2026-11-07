@@ -39,7 +39,7 @@ describe('el transporte decide la conexión', () => {
   it('20. transport wss -> conexión wss:// con SNI = tls.servername', async () => {
     const tls = await createFakeTlsServer();
     try {
-      harness.backend.setSandbox(harness.alice.agentId, {
+      harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, {
         ...sandboxFor(harness.alice, harness.agentAlice),
         endpoint: '127.0.0.1',
         port: tls.port,
@@ -66,7 +66,7 @@ describe('el transporte decide la conexión', () => {
       ...sandboxFor(harness.alice, harness.agentAlice),
       transport: 'http',
     } as unknown as SandboxConfig;
-    harness.backend.setSandbox(harness.alice.agentId, invalid);
+    harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, invalid);
 
     const attempt = await openWs(`${harness.app.wsUrl}/ws`, {
       headers: authHeader(harness.alice.accessToken),
@@ -80,7 +80,7 @@ describe('el transporte decide la conexión', () => {
   it('22. wss con rejectUnauthorized:true y cert autofirmado -> 4402, no 4401', async () => {
     const tls = await createFakeTlsServer();
     try {
-      harness.backend.setSandbox(harness.alice.agentId, {
+      harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, {
         ...sandboxFor(harness.alice, harness.agentAlice),
         port: tls.port,
         transport: 'wss',
@@ -103,7 +103,7 @@ describe('el transporte decide la conexión', () => {
   it('23a. wss con rejectUnauthorized:false -> conecta (válido solo en test)', async () => {
     const tls = await createFakeTlsServer();
     try {
-      harness.backend.setSandbox(harness.alice.agentId, {
+      harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, {
         ...sandboxFor(harness.alice, harness.agentAlice),
         port: tls.port,
         transport: 'wss',
@@ -127,7 +127,7 @@ describe('el transporte decide la conexión', () => {
     const tls = await createFakeTlsServer();
     const prodApp = await harness.restartApp({ nodeEnv: 'production' });
     try {
-      harness.backend.setSandbox(harness.alice.agentId, {
+      harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, {
         ...sandboxFor(harness.alice, harness.agentAlice),
         port: tls.port,
         transport: 'wss',
@@ -148,11 +148,11 @@ describe('el transporte decide la conexión', () => {
   });
 
   it('24. provider railway/hetzner no participa: mismo transport, mismo resultado', async () => {
-    harness.backend.setSandbox(harness.alice.agentId, {
+    harness.backend.setUserSandbox(harness.alice.userId, harness.alice.agentId, {
       ...sandboxFor(harness.alice, harness.agentAlice),
       provider: 'railway',
     } as unknown as SandboxConfig);
-    harness.backend.setSandbox(harness.bob.agentId, {
+    harness.backend.setUserSandbox(harness.bob.userId, harness.bob.agentId, {
       ...sandboxFor(harness.bob, harness.agentBob),
       provider: 'hetzner',
     } as unknown as SandboxConfig);

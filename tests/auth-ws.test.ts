@@ -34,7 +34,6 @@ describe('autenticación de entrada (WS)', () => {
   it('2. accessToken expirado -> 401', async () => {
     const expired = await signExpiredAccessToken({
       userId: harness.alice.userId,
-      agentId: harness.alice.agentId,
       secret: harness.config.accessTokenSecret,
     });
 
@@ -50,7 +49,6 @@ describe('autenticación de entrada (WS)', () => {
   it('3. accessToken firmado con otro secreto -> 401', async () => {
     const forged = await signWithWrongSecret({
       userId: harness.alice.userId,
-      agentId: harness.alice.agentId,
     });
 
     const attempt = await openWs(`${harness.app.wsUrl}/ws`, {
@@ -85,10 +83,10 @@ describe('autenticación de entrada (WS)', () => {
     );
 
     const route = harness.backend.lastRequest('/internal/route');
-    expect(route?.body).toMatchObject({
+    expect(route?.body).toStrictEqual({
       userId: harness.alice.userId,
-      agentId: harness.alice.agentId,
     });
+    expect(route?.body).not.toHaveProperty('agentId');
     expect(route?.headers['x-internal-token']).toBe(
       harness.config.internalToken,
     );

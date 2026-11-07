@@ -1,18 +1,15 @@
 /**
- * Claims the gateway expects in an access token.
+ * Claims the gateway extracts from an access token.
  *
- * The access token is issued by the backend with ACCESS_TOKEN_SECRET (HS256).
- * `agentIds` is the tenant scope of the token: the gateway rejects an agentId
- * that is not in this list *before* asking the backend for a route. That is
- * what makes case 13 ("bob's agent with alice's token => 404 and zero
- * /internal/route calls") possible without trusting the path or query.
+ * The backend issues tokens with exactly `exp`, `iat`, `jti` and `sub`;
+ * there are no agent or user custom claims. `sub` is the user id. Everything
+ * agent/sandbox-specific is resolved by the backend via /internal/route.
  */
 export interface AccessTokenClaims {
+  /** User id, taken from the standard JWT `sub` claim. */
   userId: string;
-  /** Primary agent for requests that do not carry an agentId in the path. */
-  agentId: string;
-  /** Every agent the user is allowed to touch. */
-  agentIds: string[];
+  /** Standard JWT id, present in every backend access token. */
+  jti: string;
 }
 
 export class AccessTokenError extends Error {

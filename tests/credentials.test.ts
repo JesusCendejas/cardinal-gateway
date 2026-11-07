@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { SandboxConfig } from '../src/sandbox/config.js';
 import {
   authHeader,
   createHarness,
@@ -43,10 +44,10 @@ describe('credenciales y caché', () => {
     expect(await harness.agentAlice.waitForUpgrade()).toBe(true);
 
     const route = harness.backend.lastRequest('/internal/route');
-    expect(route?.body).toMatchObject({
+    expect(route?.body).toStrictEqual({
       userId: harness.alice.userId,
-      agentId: harness.alice.agentId,
     });
+    expect(route?.body).not.toHaveProperty('agentId');
 
     const credentials = harness.backend.lastRequest('/internal/credentials');
     expect(credentials?.body).toEqual({
@@ -108,9 +109,14 @@ describe('credenciales y caché', () => {
   });
 
   it('41. la caché route:<userId>:<agentId> no contiene token', async () => {
-    const attempt = await openWs(`${harness.app.wsUrl}/ws`, {
-      headers: authHeader(harness.alice.accessToken),
+    const ticket = harness.backend.issueTicket({
+      userId: harness.alice.userId,
+      agentId: harness.alice.agentId,
     });
+
+    const attempt = await openWs(
+      `${harness.app.wsUrl}/ws?ticket=${encodeURIComponent(ticket)}`,
+    );
     expect(attempt.opened).toBe(true);
     expect(await harness.agentAlice.waitForUpgrade()).toBe(true);
 
@@ -141,6 +147,60 @@ describe('credenciales y caché', () => {
     expect(harness.backend.requestsFor('/internal/route')).toHaveLength(1);
     expect(await harness.agentAlice.waitForUpgrade()).toBe(true);
     expect(harness.redis.errorCount()).toBeGreaterThan(0);
+
+    await attempt.close();
+  });
+
+  it('44. caché con sandboxId viejo -> invalida, re-route, credenciales nuevas y conecta (1 reintento)', async () => {
+    const cacheKey = `route:${harness.alice.userId}:${harness.alice.agentId}`;
+    const staleSandbox: SandboxConfig = {
+      sandboxId: 'sandbox-stale',
+      endpoint: '127.0.0.1',
+      port: harness.agentAlice.port,
+      transport: 'ws',
+    };
+
+    await harness.redis.set(
+      cacheKey,
+      JSON.stringify(staleSandbox),
+      'EX',
+      60,
+    );
+
+    const ticket = harness.backend.issueTicket({
+      userId: harness.alice.userId,
+      agentId: harness.alice.agentId,
+    });
+
+    const attempt = await openWs(
+      `${harness.app.wsUrl}/ws?ticket=${encodeURIComponent(ticket)}`,
+    );
+
+    expect(attempt.opened).toBe(true);
+    expect(await harness.agentAlice.waitForUpgrade()).toBe(true);
+    expect(harness.agentAlice.upgradeRequests).toHaveLength(1);
+
+    const routeRequests = harness.backend.requestsFor('/internal/route');
+    expect(routeRequests).toHaveLength(1);
+    expect(routeRequests[0]?.body).toEqual({
+      userId: harness.alice.userId,
+      agentId: harness.alice.agentId,
+    });
+
+    const credentialBodies = harness.backend
+      .requestsFor('/internal/credentials')
+      .map((request) => request.body);
+    expect(credentialBodies).toEqual([
+      { sandboxId: staleSandbox.sandboxId },
+      { sandboxId: harness.alice.sandboxId },
+    ]);
+
+    const repaired = await harness.redis.get(cacheKey);
+    expect(repaired).not.toBeNull();
+    expect(repaired).not.toContain(staleSandbox.sandboxId);
+    expect(JSON.parse(repaired as string)).toMatchObject({
+      sandboxId: harness.alice.sandboxId,
+    });
 
     await attempt.close();
   });
