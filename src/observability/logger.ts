@@ -5,42 +5,77 @@ import type { GatewayConfig } from '../config/env.js';
 export type AppLogger = pino.Logger;
 export type LogDestination = pino.DestinationStream;
 
-const SECRET_KEY_PATTERN = /token|secret|authorization|cookie|credential|ticket/i;
+/**
+ * Allowlist of context fields that may ever reach a log sink.
+ *
+ * This is deliberately a field-by-field allowlist, not a recursive denylist.
+ * A future `wsSecret` (or any other unknown field) added to `SandboxConfig`
+ * is dropped by default; it can only be logged after someone explicitly adds
+ * its name here. The error itself is reduced to `name`/`message`/`code`.
+ */
+const ALLOWED_LOG_FIELDS = new Set([
+  'action',
+  'code',
+  'reason',
+  'status',
+  'userId',
+  'sandboxId',
+  'connectionId',
+  'transport',
+  'error',
+]);
 
-function isSecretKey(key: string): boolean {
-  return SECRET_KEY_PATTERN.test(key);
+function serializeError(error: Error): Record<string, unknown> {
+  const safe: Record<string, unknown> = {
+    name: error.name,
+    message: error.message,
+  };
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' || typeof code === 'number') {
+    safe.code = code;
+  }
+  return safe;
 }
 
 /**
- * Defensive serializer for anything that is about to be handed to pino.
+ * Build a pino-safe context object field by field (allowlist).
  *
- * The redaction rules in `createLogger` protect the well-known paths, but a
- * random object passed as a log context could still carry a capability token
- * under an unexpected key. Everything this gateway logs goes through here
- * first: secret-looking keys are replaced and errors are reduced to their
- * safe name/message pair.
+ * Call sites pass an explicit object such as
+ * `{ userId, sandboxId, error }`; this function copies only the allowed
+ * primitive fields and the safe subset of an `Error`. Everything else
+ * (objects, arrays, unknown or future config fields) is intentionally dropped.
  */
-export function toLoggable(value: unknown, depth = 0): unknown {
+export function toLoggable(value: unknown): Record<string, unknown> {
   if (value instanceof Error) {
-    return { name: value.name, message: value.message };
+    return serializeError(value);
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
   }
 
-  if (value === null || value === undefined) return value;
-  if (typeof value !== 'object') return value;
-  if (depth >= 5) return '[REDACTED]';
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => toLoggable(entry, depth + 1));
-  }
-
+  const source = value as Record<string, unknown>;
   const result: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (isSecretKey(key)) {
-      result[key] = '[REDACTED]';
-    } else {
-      result[key] = toLoggable(entry, depth + 1);
+
+  for (const key of ALLOWED_LOG_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+    const entry = source[key];
+
+    if (key === 'error') {
+      if (entry instanceof Error) {
+        result.error = serializeError(entry);
+      }
+      continue;
+    }
+
+    if (
+      typeof entry === 'string' ||
+      typeof entry === 'number' ||
+      typeof entry === 'boolean'
+    ) {
+      result[key] = entry;
     }
   }
+
   return result;
 }
 

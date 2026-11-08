@@ -96,7 +96,7 @@ export function createRouteCache(options: RouteCacheOptions): RouteCache {
 
   function logRedisFailure(action: string, error: unknown): void {
     logger.error(
-      { action, error: toLoggable(error) },
+      toLoggable({ action, error }),
       'redis route cache unavailable',
     );
   }

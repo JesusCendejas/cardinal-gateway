@@ -360,7 +360,7 @@ export function registerProxyRoutes(
     } catch (error) {
       const failure = mapProxyFailure(error);
       logger.warn(
-        { error: toLoggable(error), status: failure.status },
+        toLoggable({ error, status: failure.status }),
         'proxy request failed',
       );
       await reply.code(failure.status).send({ error: failure.error });

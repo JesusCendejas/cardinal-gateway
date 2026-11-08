@@ -54,7 +54,7 @@ export class RateLimiter {
         return await this.consumeRedis(key);
       } catch (error) {
         this.logger.error(
-          { error: toLoggable(error), key },
+          toLoggable({ error, userId: key }),
           'redis error while checking rate limit; falling back to local counter',
         );
       }

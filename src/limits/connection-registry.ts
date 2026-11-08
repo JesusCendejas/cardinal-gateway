@@ -79,7 +79,7 @@ export function createConnectionRegistry(
 
   function logRedisFailure(action: string, error: unknown): void {
     logger?.warn(
-      { action, error: toLoggable(error) },
+      toLoggable({ action, error }),
       'redis error in connection registry',
     );
   }
@@ -110,8 +110,11 @@ export function createConnectionRegistry(
           'NX',
         );
         if (result === null) {
-          // Another gateway instance owns the slot.
-          local.delete(userId);
+          // Another gateway instance owns the slot. Only remove the local
+          // entry if it still belongs to this connection.
+          if (local.get(userId)?.connectionId === connectionId) {
+            local.delete(userId);
+          }
           return false;
         }
         return true;

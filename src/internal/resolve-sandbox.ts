@@ -62,11 +62,11 @@ export async function resolveSandboxWithCredentials(
     }
 
     deps.logger.warn(
-      {
+      toLoggable({
         userId,
         sandboxId: sandbox.sandboxId,
-        error: toLoggable(error),
-      },
+        error,
+      }),
       'stale route cache entry; invalidating and re-routing once',
     );
 

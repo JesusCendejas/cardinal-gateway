@@ -64,7 +64,7 @@ function createRedisClient(url: string, logger: AppLogger): RedisClientLike {
     lazyConnect: false,
   });
   client.on('error', (error: unknown) => {
-    logger.warn({ error: toLoggable(error) }, 'redis client error');
+    logger.warn(toLoggable({ error }), 'redis client error');
   });
   return client as unknown as RedisClientLike;
 }

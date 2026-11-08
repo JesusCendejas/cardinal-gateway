@@ -337,7 +337,7 @@ export function registerWsRoutes(
       void prepared.connection.close();
       void registry.release(prepared.userId, prepared.connectionId);
       logger.warn(
-        { error: toLoggable(error) },
+        toLoggable({ error }),
         'websocket upgrade failed after setup',
       );
       try {
@@ -484,11 +484,11 @@ export function registerWsRoutes(
     } catch (error) {
       const failure = mapFailure(error);
       logger.warn(
-        {
+        toLoggable({
           code: failure.code,
           reason: failure.reason,
-          error: toLoggable(error),
-        },
+          error,
+        }),
         'websocket session setup failed',
       );
       if (connection) {
@@ -508,7 +508,7 @@ export function registerWsRoutes(
   ): void => {
     void handleUpgrade(request, socket, head).catch((error: unknown) => {
       logger.error(
-        { error: toLoggable(error) },
+        toLoggable({ error }),
         'unhandled websocket upgrade failure',
       );
       try {
