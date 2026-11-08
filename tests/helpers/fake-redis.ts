@@ -11,12 +11,21 @@ interface RedisWrite {
   args: Array<string | number>;
 }
 
-function globToRegExp(pattern: string): RegExp {
-  const escaped = pattern
-    .replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
-    .replace(/\\\*/g, '.*')
-    .replace(/\\\?/g, '.');
-  return new RegExp(`^${escaped}$`);
+/**
+ * Translate a Redis KEYS glob into a RegExp.
+ *
+ * Redis wildcards are `*` (any sequence) and `?` (one character). Every other
+ * regex metacharacter is escaped literally; a single pass is important because
+ * escaping first and replacing `\*` afterwards leaves a bare `*` as a regex
+ * quantifier (`route:*` would compile to `/^route:*$/`).
+ */
+export function globToRegExp(pattern: string): RegExp {
+  const body = pattern.replace(/[.*+?^${}()|[\]\\]/g, (character) => {
+    if (character === '*') return '.*';
+    if (character === '?') return '.';
+    return `\\${character}`;
+  });
+  return new RegExp(`^${body}$`);
 }
 
 /**

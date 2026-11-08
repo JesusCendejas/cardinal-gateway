@@ -1,27 +1,34 @@
-import type WebSocket from 'ws';
+import type { SandboxConfig } from '../config.js';
+import { UnsupportedTransportError } from './errors.js';
+import type {
+  SandboxConnection,
+  SandboxConnectionOptions,
+} from './sandbox-connection.js';
+import { createWsConnection } from './ws-connection.js';
+import { createWssConnection } from './wss-connection.js';
 
-import type { SandboxConfig, SandboxCredentials } from '../config.js';
-
-export interface SandboxConnection {
-  readonly socket: WebSocket;
-  readonly config: SandboxConfig;
-  close(): Promise<void>;
-}
-
-export interface SandboxConnectionOptions {
-  handshakeTimeoutMs: number;
-  nodeEnv: 'development' | 'test' | 'production';
-}
+export type { SandboxConnection, SandboxConnectionOptions };
 
 /**
- * Builds a WebSocket connection from the normalized SandboxConfig plus the
- * short-lived capability token. The token is passed as an argument and never
- * becomes part of `config`.
+ * Build a WebSocket connection from the normalized SandboxConfig plus the
+ * short-lived capability token.
+ *
+ * `transport` is the only selector. There is deliberately no `provider`
+ * parameter and no `provider` branch: Railway, Hetzner, Fly and bare metal
+ * are indistinguishable here. An unknown transport throws before any socket
+ * is opened, so the route can close with 4503.
  */
 export async function createSandboxConnection(
-  _config: SandboxConfig,
-  _credentials: SandboxCredentials,
-  _options: SandboxConnectionOptions,
+  config: SandboxConfig,
+  token: string,
+  options: SandboxConnectionOptions,
 ): Promise<SandboxConnection> {
-  throw new Error('not implemented');
+  switch (config.transport) {
+    case 'ws':
+      return createWsConnection(config, token, options);
+    case 'wss':
+      return createWssConnection(config, token, options);
+    default:
+      throw new UnsupportedTransportError(String(config.transport));
+  }
 }

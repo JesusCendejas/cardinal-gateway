@@ -1,15 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 
 /**
- * Phase 0 stub. Health checks will answer 501 until the real readiness probe
- * (Redis + backend) exists.
+ * Liveness and readiness endpoints.
+ *
+ * `healthz` is process liveness only. `readyz` reports the gateway ready once
+ * Fastify is accepting requests; Redis is a cache/fail-open dependency, so a
+ * Redis outage must not make the gateway unready.
  */
 export function registerHealthRoutes(app: FastifyInstance): void {
   app.get('/healthz', async (_request, reply) => {
-    return reply.code(501).send({ error: 'NOT_IMPLEMENTED' });
+    return reply.code(200).send({ status: 'ok' });
   });
 
   app.get('/readyz', async (_request, reply) => {
-    return reply.code(501).send({ error: 'NOT_IMPLEMENTED' });
+    return reply.code(200).send({ status: 'ok' });
   });
 }
